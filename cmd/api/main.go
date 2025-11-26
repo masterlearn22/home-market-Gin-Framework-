@@ -1,7 +1,23 @@
 package main
 
-import "fmt"
+import (
+	"fmt"
+	"os"
+	"home-market/internal/config"
+)
 
 func main() {
 	fmt.Println("Hello, World!")
+
+	//1. Load .env file
+	config.LoadEnv()
+
+	host := os.Getenv("DB_HOST")
+
+    if host == "" {
+        fmt.Println(".env gagal diload atau DB_HOST tidak ditemukan")
+    } else {
+        fmt.Println(".env berhasil diload. DB_HOST =", host)
+    }
+	
 }
