@@ -30,6 +30,4 @@ func main() {
 
 	//5. Run the server
 	config.SetupServer(app)
-
-
 }
