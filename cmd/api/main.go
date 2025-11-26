@@ -4,7 +4,7 @@ import (
 	"fmt"
 	// "os"
 	config "home-market/internal/config"
-	"github.com/gin-gonic/gin"
+	"home-market/internal/delivery/http/route"
 )
 
 func main() {
@@ -13,29 +13,20 @@ func main() {
 	//1. Load .env file
 	config.LoadEnv()
 
-	// host := os.Getenv("DB_HOST")
-
-    // if host == "" {
-    //     fmt.Println(".env gagal diload atau DB_HOST tidak ditemukan")
-    // } else {
-    //     fmt.Println(".env berhasil diload. DB_HOST =", host)
-    // }
-
 	//2. Connect to Database
 
 	// Connect to PostgreSQL
 	config.ConnectPostgres()
 	defer config.PostgresDB.Close()
-	fmt.Println("PostgreSQL connection closed.")
 
 	// Connect to MongoDB
 	config.ConnectMongo()
-	fmt.Println("MongoDB connection closed.")
 	
 	//3. Setup Gin App
 	app := config.SetupGin()
-	app.GET("/ping", func(c *gin.Context) {
-		c.JSON(200, gin.H{"message": "pong"})
-	})
-	app.Run(":8080")
+
+	//4. Initialize Routes
+	route.SetupPostgres(app, config.PostgresDB)
+	fmt.Println("Setup route berhasil")
+
 }
