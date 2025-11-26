@@ -25,7 +25,7 @@ func main() {
 	var app = config.SetupGin()
 
 	//4. Initialize Routes
-	route.SetupPostgres(app, config.PostgresDB)
+	route.SetupRoute(app, config.PostgresDB)
 	fmt.Println("Setup route berhasil")
 
 	//5. Run the server
