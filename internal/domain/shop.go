@@ -14,3 +14,9 @@ type Shop struct {
 	CreatedAt time.Time `db:"created_at"`
 	UpdatedAt time.Time `db:"updated_at"`
 }
+
+type CreateShopInput struct {
+	Name        string `json:"name" binding:"required"`
+	Description string `json:"description"`
+	Address     string `json:"address" binding:"required"`
+}

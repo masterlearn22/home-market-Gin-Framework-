@@ -8,6 +8,7 @@ import (
 	repo "home-market/internal/repository/postgresql"
 	service "home-market/internal/service/postgresql"
 	"github.com/gin-gonic/gin"
+	"home-market/internal/delivery/http/middleware"
 )
 
 func SetupRoute(app *gin.Engine, db *sql.DB) {
@@ -22,6 +23,9 @@ func SetupRoute(app *gin.Engine, db *sql.DB) {
 	userRepo := repo.NewUserRepository(db)
 	authService := service.NewAuthService(userRepo, defaultRoleID)
 	authHandler := httpHandler.NewAuthHandler(authService)
+	shopRepo := repo.NewShopRepository(db)
+	shopService := service.NewShopService(shopRepo)
+	shopHandler := httpHandler.NewShopHandler(shopService)
 
 	// --- 3. Definisikan group route ---
 	api := app.Group("/api")
@@ -30,5 +34,10 @@ func SetupRoute(app *gin.Engine, db *sql.DB) {
 	auth.POST("/register", authHandler.Register)
 	auth.POST("/login", authHandler.Login)
 	auth.POST("/refresh", authHandler.Refresh)
-	auth.GET("/profile", authHandler.Profile) // nanti bisa kamu pasang middleware JWT di sini
+	auth.GET("/profile", middleware.AuthRequired(), authHandler.Profile)
+
+	
+	shop := api.Group("/shops")
+	shop.POST("/", middleware.AuthRequired(), shopHandler.CreateShop)
+	
 }
