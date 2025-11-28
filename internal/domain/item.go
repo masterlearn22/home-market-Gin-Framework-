@@ -24,3 +24,12 @@ type ItemImage struct {
 	ImageURL  string    `db:"image_url"`
 	CreatedAt time.Time `db:"created_at"`
 }
+
+type CreateItemInput struct {
+	Name        string  `form:"name" binding:"required"`
+	Description string  `form:"description"`
+	Price       float64 `form:"price" binding:"required"`
+	Stock       int     `form:"stock" binding:"required"`
+	Condition   string  `form:"condition" binding:"required"`
+	CategoryID  uuid.UUID `form:"category_id" binding:"required"`
+}

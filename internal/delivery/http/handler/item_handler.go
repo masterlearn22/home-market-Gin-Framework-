@@ -1,0 +1,119 @@
+package handler
+
+import (
+	entity "home-market/internal/domain"
+	service "home-market/internal/service/postgresql"
+	// "mime/multipart"
+	// "net/http"
+	"fmt"
+	"io"
+	"path/filepath"
+	"strconv"
+
+	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
+)
+
+type ItemHandler struct {
+	itemService *service.ItemService
+}
+
+func NewItemHandler(itemService *service.ItemService) *ItemHandler {
+	return &ItemHandler{itemService: itemService}
+}
+
+func (h *ItemHandler) CreateItem(c *gin.Context) {
+	fmt.Println("Content-Type:", c.GetHeader("Content-Type"))
+body, _ := io.ReadAll(c.Request.Body)
+fmt.Println("BODY LENGTH:", len(body))
+
+	userID := c.MustGet("user_id").(uuid.UUID)
+	role := c.MustGet("role_name").(string)
+
+	// --- FORM MULTIPART ---
+	form, err := c.MultipartForm()
+	if err != nil {
+		c.JSON(400, gin.H{"error": "invalid form-data", "detail": err.Error()})
+		return
+	}
+
+	// helper
+	get := func(key string) string {
+		if v, ok := form.Value[key]; ok && len(v) > 0 {
+			return v[0]
+		}
+		return ""
+	}
+
+	// --- Ambil text fields ---
+	name := get("name")
+	description := get("description")
+	priceStr := get("price")
+	stockStr := get("stock")
+	condition := get("condition")
+	categoryIDStr := get("category_id")
+
+	if name == "" || priceStr == "" || stockStr == "" || categoryIDStr == "" {
+		c.JSON(400, gin.H{"error": "missing required fields"})
+		return
+	}
+
+	price, err := strconv.ParseFloat(priceStr, 64)
+	if err != nil {
+		c.JSON(400, gin.H{"error": "invalid price"})
+		return
+	}
+
+	stock, err := strconv.Atoi(stockStr)
+	if err != nil {
+		c.JSON(400, gin.H{"error": "invalid stock"})
+		return
+	}
+
+	categoryID, err := uuid.Parse(categoryIDStr)
+	if err != nil {
+		c.JSON(400, gin.H{"error": "invalid category_id"})
+		return
+	}
+
+	input := entity.CreateItemInput{
+		Name:        name,
+		Description: description,
+		Price:       price,
+		Stock:       stock,
+		Condition:   condition,
+		CategoryID:  categoryID,
+	}
+
+	// --- Images ---
+	files := form.File["images"]
+
+	var imageURLs []string
+	for _, file := range files {
+		filename := uuid.New().String() + filepath.Ext(file.Filename)
+		savePath := "uploads/items/" + filename
+
+		if err := c.SaveUploadedFile(file, savePath); err != nil {
+			c.JSON(500, gin.H{"error": err.Error()})
+			return
+		}
+
+		imageURLs = append(imageURLs, "/uploads/items/"+filename)
+	}
+
+	// --- Service ---
+	item, images, err := h.itemService.CreateItem(userID, role, input, imageURLs)
+	if err != nil {
+		c.JSON(400, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(201, gin.H{
+		"item":   item,
+		"images": images,
+	})
+}
+
+
+
+
