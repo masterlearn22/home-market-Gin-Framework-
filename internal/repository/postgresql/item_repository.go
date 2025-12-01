@@ -12,6 +12,8 @@ type ItemRepository interface {
 	CreateItemImage(img *entity.ItemImage) error
 	GetShopByUserID(userID uuid.UUID) (*entity.Shop, error)
 	IsCategoryOwnedByShop(categoryID, shopID uuid.UUID) (bool, error)
+	GetItemByID(id uuid.UUID) (*entity.Item, error)
+    UpdateItem(item *entity.Item) error
 }
 
 type itemRepository struct {
@@ -81,4 +83,32 @@ func (r *itemRepository) CreateItemImage(img *entity.ItemImage) error {
 	`
 	_, err := r.db.Exec(query, img.ID, img.ItemID, img.ImageURL)
 	return err
+}
+
+func (r *itemRepository) GetItemByID(id uuid.UUID) (*entity.Item, error) {
+    var item entity.Item
+    query := `
+        SELECT id, shop_id, category_id, name, description, price, stock, condition, status, created_at, updated_at
+        FROM items WHERE id = $1
+    `
+    err := r.db.QueryRow(query, id).Scan(
+        &item.ID, &item.ShopID, &item.CategoryID, &item.Name, &item.Description,
+        &item.Price, &item.Stock, &item.Condition, &item.Status, &item.CreatedAt, &item.UpdatedAt,
+    )
+    if err == sql.ErrNoRows {
+        return nil, nil // Tidak error, tapi data kosong
+    }
+    return &item, err
+}
+
+func (r *itemRepository) UpdateItem(item *entity.Item) error {
+    query := `
+        UPDATE items
+        SET name=$1, description=$2, price=$3, stock=$4, condition=$5, status=$6, updated_at=NOW()
+        WHERE id=$7
+    `
+    _, err := r.db.Exec(query,
+        item.Name, item.Description, item.Price, item.Stock, item.Condition, item.Status, item.ID,
+    )
+    return err
 }

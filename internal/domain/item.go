@@ -33,3 +33,12 @@ type CreateItemInput struct {
 	Condition   string  `form:"condition" binding:"required"`
 	CategoryID  uuid.UUID `form:"category_id" binding:"required"`
 }
+
+type UpdateItemInput struct {
+    Name        string  `json:"name" binding:"required"`
+    Description string  `json:"description"`
+    Price       float64 `json:"price" binding:"min=0"`
+    Stock       int     `json:"stock" binding:"min=0"` 
+    Condition   string  `json:"condition" binding:"required"`
+    Status      string  `json:"status"` 
+}

@@ -113,3 +113,46 @@ func (h *ItemHandler) CreateItem(c *gin.Context) {
 		"images": images,
 	})
 }
+
+func (h *ItemHandler) UpdateItem(c *gin.Context) {
+    idStr := c.Param("id")
+    itemID, err := uuid.Parse(idStr)
+    if err != nil {
+        c.JSON(400, gin.H{"error": "invalid item id"})
+        return
+    }
+
+    var input entity.UpdateItemInput
+    if err := c.ShouldBindJSON(&input); err != nil {
+        c.JSON(400, gin.H{"error": "invalid input", "detail": err.Error()})
+        return
+    }
+
+    userID := c.MustGet("user_id").(uuid.UUID)
+
+    updatedItem, err := h.itemService.UpdateItem(userID, itemID, input)
+    if err != nil {
+        c.JSON(500, gin.H{"error": err.Error()})
+        return
+    }
+
+    c.JSON(200, gin.H{"message": "item updated", "data": updatedItem})
+}
+
+func (h *ItemHandler) DeleteItem(c *gin.Context) {
+    idStr := c.Param("id")
+    itemID, err := uuid.Parse(idStr)
+    if err != nil {
+        c.JSON(400, gin.H{"error": "invalid item id"})
+        return
+    }
+
+    userID := c.MustGet("user_id").(uuid.UUID)
+
+    if err := h.itemService.DeleteItem(userID, itemID); err != nil {
+        c.JSON(500, gin.H{"error": err.Error()})
+        return
+    }
+
+    c.JSON(200, gin.H{"message": "item archived/deleted successfully"})
+}

@@ -49,5 +49,7 @@ func SetupRoute(app *gin.Engine, db *sql.DB) {
 	cat.POST("/", middleware.AuthRequired(), categoryHandler.CreateCategory)
 	items := api.Group("/items")
 	items.POST("/", middleware.AuthRequired(), itemHandler.CreateItem)
+	items.PUT("/:id", itemHandler.UpdateItem)    // FR-SELLER-04 & FR-SELLER-06
+    items.DELETE("/:id", itemHandler.DeleteItem) // FR-SELLER-05
 	
 }
