@@ -6,7 +6,7 @@ import (
 	// "mime/multipart"
 	// "net/http"
 	"fmt"
-	"io"
+	// "io"
 	"path/filepath"
 	"strconv"
 
@@ -24,8 +24,8 @@ func NewItemHandler(itemService *service.ItemService) *ItemHandler {
 
 func (h *ItemHandler) CreateItem(c *gin.Context) {
 	fmt.Println("Content-Type:", c.GetHeader("Content-Type"))
-body, _ := io.ReadAll(c.Request.Body)
-fmt.Println("BODY LENGTH:", len(body))
+	// body, _ := io.ReadAll(c.Request.Body)
+	// fmt.Println("BODY LENGTH:", len(body))
 
 	userID := c.MustGet("user_id").(uuid.UUID)
 	role := c.MustGet("role_name").(string)
@@ -113,7 +113,3 @@ fmt.Println("BODY LENGTH:", len(body))
 		"images": images,
 	})
 }
-
-
-
-
