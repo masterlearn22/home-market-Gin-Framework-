@@ -353,3 +353,99 @@ func (s *ItemService) createDraftItemFromOffer(offer *entity.Offer, shopID uuid.
         UpdatedAt:   time.Now(),
     }
 }
+
+// [internal/service/item_service.go]
+
+// FR-BUYER-01 & FR-BUYER-02: Melihat & Filter Marketplace
+func (s *ItemService) GetMarketplaceItems(filter entity.ItemFilter) ([]entity.Item, error) {
+    // Asumsi filter role sudah dilakukan di middleware (jika perlu)
+    return s.itemRepo.GetMarketItems(filter)
+}
+
+// FR-BUYER-03: Melihat Detail Barang
+func (s *ItemService) GetItemDetail(itemID uuid.UUID) (*entity.Item, error) {
+    // Implementasi ini mengandalkan GetItemForOrder/GetItemByID
+    item, err := s.itemRepo.GetItemForOrder(itemID)
+    if err != nil {
+        return nil, err
+    }
+    if item == nil || item.Status != "active" {
+        return nil, errors.New("item not found or inactive")
+    }
+    // Asumsi JOIN dengan data Shop/Images dilakukan di layer ini atau di handler
+    return item, nil
+}
+
+// FR-BUYER-0ER-04: Membuat Order
+func (s *ItemService) CreateOrder(buyerID uuid.UUID, input entity.CreateOrderInput) (*entity.Order, error) {
+    // 1. Validasi Stok, Harga, dan Grouping per Toko
+    
+    // Map untuk mengelompokkan item berdasarkan ShopID
+    shopItems := make(map[uuid.UUID][]entity.OrderItem)
+    itemDetails := make(map[uuid.UUID]*entity.Item)
+    
+    // Looping validasi
+    for _, itemInput := range input.Items {
+        item, err := s.itemRepo.GetItemForOrder(itemInput.ItemID)
+        if err != nil {
+            return nil, errors.New("database error during item fetch")
+        }
+        if item == nil || item.Status != "active" || item.Stock < itemInput.Quantity {
+            return nil, errors.New("invalid item, insufficient stock, or item inactive") // Validasi stok tersedia
+        }
+        
+        // Simpan detail item dan group ke shop
+        itemDetails[item.ID] = item
+        
+        orderItem := entity.OrderItem{
+            ItemID: item.ID,
+            Quantity: itemInput.Quantity,
+            Price: item.Price, // Harga saat order dibuat (snapshot)
+            OrderID: uuid.Nil, // Akan diisi saat order dibuat
+        }
+        shopItems[item.ShopID] = append(shopItems[item.ShopID], orderItem)
+    }
+    
+    // 2. Membuat Order per Toko (Simplifikasi: Hanya support satu toko per order/per transaksi ini)
+    if len(shopItems) != 1 {
+        // Dalam konteks nyata, harus ada logic keranjang/cart multi-shop atau multiple orders.
+        return nil, errors.New("multi-shop orders are not supported in a single transaction yet")
+    }
+    
+    var shopID uuid.UUID
+    var itemsForOrder []entity.OrderItem
+    var totalPrice float64
+    
+    for id, items := range shopItems {
+        shopID = id
+        itemsForOrder = items
+        for _, item := range items {
+            totalPrice += item.Price * float64(item.Quantity)
+        }
+        break // Ambil hanya toko pertama (karena validasi di atas)
+    }
+
+    // 3. Buat Struct Order
+    order := &entity.Order{
+        ID:              uuid.New(),
+        BuyerID:         buyerID,
+        ShopID:          shopID,
+        TotalPrice:      totalPrice,
+        Status:          "pending", // Default status
+        ShippingAddress: input.ShippingAddress,
+        ShippingCourier: input.ShippingCourier,
+    }
+    
+    // Update OrderID di OrderItem structs
+    for i := range itemsForOrder {
+        itemsForOrder[i].OrderID = order.ID
+        itemsForOrder[i].ID = uuid.New()
+    }
+
+    // 4. Jalankan Transaksi
+    if err := s.itemRepo.CreateOrderTransaction(order, itemsForOrder); err != nil {
+        return nil, err
+    }
+
+    return order, nil
+}

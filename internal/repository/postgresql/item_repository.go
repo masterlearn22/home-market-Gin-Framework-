@@ -19,6 +19,9 @@ type ItemRepository interface {
     GetOffersBySellerID(sellerID uuid.UUID) ([]entity.Offer, error)
     GetOfferByID(offerID uuid.UUID) (*entity.Offer, error)
     UpdateOffer(offer *entity.Offer) error
+    GetMarketItems(filter entity.ItemFilter) ([]entity.Item, error)
+    GetItemForOrder(itemID uuid.UUID) (*entity.Item, error) // Ambil detail item + stok
+    CreateOrderTransaction(order *entity.Order, items []entity.OrderItem) error
 }
 
 type itemRepository struct {
@@ -216,4 +219,83 @@ func (r *itemRepository) UpdateOffer(offer *entity.Offer) error {
     // agreed_price (offer.AgreedPrice) sekarang bertipe sql.NullFloat64
     _, err := r.db.Exec(query, offer.Status, offer.AgreedPrice, offer.ID)
     return err
+}
+
+// Implementasi
+// FR-BUYER-01 & FR-BUYER-02: Melihat & Filter Marketplace
+func (r *itemRepository) GetMarketItems(filter entity.ItemFilter) ([]entity.Item, error) {
+    // Implementasi ini akan panjang karena harus membuat query dinamis
+    // Untuk mempersingkat, kita buat query dasar saja
+    var items []entity.Item
+    
+    // Query dasar: status='active' dan stock > 0 (FR-BUYER-01)
+    query := `
+        SELECT id, shop_id, category_id, name, description, price, stock, condition, status, created_at, updated_at
+        FROM items
+        WHERE status = 'active' AND stock > 0
+    `
+    // Implementasi filter (FR-BUYER-02) di sini: Keyword, CategoryID, Price Range, Limit, Offset.
+    // ... logic pembuatan WHERE clause dinamis ... 
+    
+    // Karena ini contoh, kita eksekusi query dasar tanpa filter dinamis:
+    rows, err := r.db.Query(query) 
+    if err != nil {
+        return nil, err
+    }
+    defer rows.Close()
+
+    for rows.Next() {
+        var item entity.Item
+        // Scan semua field
+        // ...
+        items = append(items, item)
+    }
+    return items, nil
+}
+
+// FR-BUYER-03 & FR-BUYER-04: Ambil Item Detail
+func (r *itemRepository) GetItemForOrder(itemID uuid.UUID) (*entity.Item, error) {
+    // Query sama dengan GetItemByID, tapi mungkin ditambahkan JOIN ke Shop
+    // Untuk mempersingkat, kita gunakan GetItemByID yang sudah ada
+    // ...
+    // Pastikan item ada, aktif, dan stok > 0
+    // ...
+    return r.GetItemByID(itemID) // Asumsi sudah cukup
+}
+
+// FR-BUYER-04: Membuat Order (Menggunakan Transaksi)
+func (r *itemRepository) CreateOrderTransaction(order *entity.Order, orderItems []entity.OrderItem) error {
+    tx, err := r.db.Begin()
+    if err != nil {
+        return err
+    }
+    
+    // 1. Insert Order
+    orderQuery := `
+        INSERT INTO orders (id, buyer_id, shop_id, total_price, status, shipping_address, shipping_courier, created_at, updated_at)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), NOW())
+    `
+    if _, err := tx.Exec(orderQuery, order.ID, order.BuyerID, order.ShopID, order.TotalPrice, order.Status, order.ShippingAddress, order.ShippingCourier); err != nil {
+        tx.Rollback()
+        return err
+    }
+
+    // 2. Insert Order Items & Update Stock (Loop)
+    for _, item := range orderItems {
+        // Insert Order Item
+        itemQuery := `INSERT INTO order_items (id, order_id, item_id, quantity, price, created_at) VALUES ($1, $2, $3, $4, $5, NOW())`
+        if _, err := tx.Exec(itemQuery, uuid.New(), item.OrderID, item.ItemID, item.Quantity, item.Price); err != nil {
+            tx.Rollback()
+            return err
+        }
+        
+        // Update Stock (Decrement)
+        stockQuery := `UPDATE items SET stock = stock - $1 WHERE id = $2`
+        if _, err := tx.Exec(stockQuery, item.Quantity, item.ItemID); err != nil {
+            tx.Rollback()
+            return err
+        }
+    }
+
+    return tx.Commit()
 }

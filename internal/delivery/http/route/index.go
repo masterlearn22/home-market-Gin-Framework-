@@ -59,4 +59,10 @@ func SetupRoute(app *gin.Engine, db *sql.DB) {
     offers.GET("/inbox", middleware.AuthRequired(), itemHandler.GetOffersToSeller)
     offers.POST("/:id/accept", middleware.AuthRequired(), itemHandler.AcceptOffer)
     offers.POST("/:id/reject", middleware.AuthRequired(), itemHandler.RejectOffer)	
+
+	market := api.Group("/market")
+    market.GET("/items", itemHandler.GetMarketplaceItems)
+    market.GET("/items/:id", itemHandler.GetItemDetail)  
+    orders := api.Group("/orders")
+    orders.POST("", middleware.AuthRequired(), itemHandler.CreateOrder)
 }

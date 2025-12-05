@@ -319,3 +319,66 @@ func (h *ItemHandler) RejectOffer(c *gin.Context) {
         "offer": offer,
     })
 }
+
+// [internal/delivery/http/handler/item_handler.go]
+
+// FR-BUYER-01 & FR-BUYER-02: Melihat & Filter Marketplace
+func (h *ItemHandler) GetMarketplaceItems(c *gin.Context) {
+    var filter entity.ItemFilter
+    // c.ShouldBindQuery dapat menangani ItemFilter
+    if err := c.ShouldBindQuery(&filter); err != nil {
+        c.JSON(400, gin.H{"error": "invalid query parameters"})
+        return
+    }
+
+    items, err := h.itemService.GetMarketplaceItems(filter)
+    if err != nil {
+        c.JSON(500, gin.H{"error": err.Error()})
+        return
+    }
+
+    c.JSON(200, gin.H{"data": items})
+}
+
+// FR-BUYER-03: Melihat Detail Barang
+func (h *ItemHandler) GetItemDetail(c *gin.Context) {
+    idStr := c.Param("id")
+    itemID, err := uuid.Parse(idStr)
+    if err != nil {
+        c.JSON(400, gin.H{"error": "invalid item id"})
+        return
+    }
+
+    item, err := h.itemService.GetItemDetail(itemID)
+    if err != nil {
+        c.JSON(404, gin.H{"error": err.Error()})
+        return
+    }
+
+    c.JSON(200, gin.H{"data": item})
+}
+
+// FR-BUYER-04: Membuat Order
+func (h *ItemHandler) CreateOrder(c *gin.Context) {
+    userID := c.MustGet("user_id").(uuid.UUID)
+    role := c.MustGet("role_name").(string)
+    
+    if role != "buyer" {
+        c.JSON(403, gin.H{"error": "Forbidden: only Buyer can create orders"})
+        return
+    }
+
+    var input entity.CreateOrderInput
+    if err := c.ShouldBindJSON(&input); err != nil {
+        c.JSON(400, gin.H{"error": "invalid input", "detail": err.Error()})
+        return
+    }
+
+    order, err := h.itemService.CreateOrder(userID, input)
+    if err != nil {
+        c.JSON(400, gin.H{"error": err.Error()})
+        return
+    }
+
+    c.JSON(201, gin.H{"message": "Order created successfully", "order": order})
+}
