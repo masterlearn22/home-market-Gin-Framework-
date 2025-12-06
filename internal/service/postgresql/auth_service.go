@@ -10,27 +10,19 @@ import (
 	"github.com/google/uuid"
 )
 
-// ==== Error yang diexport agar bisa dipakai di handler ====
 var (
 	ErrInvalidCredentials  = errors.New("invalid username or password")
 	ErrInactiveAccount     = errors.New("account is inactive")
 	ErrInvalidRefreshToken = errors.New("invalid refresh token")
 	ErrInvalidUserID       = errors.New("invalid user id")
 	ErrUserNotFound        = errors.New("user not found")
-
 	ErrUsernameTaken = errors.New("username already taken")
 	ErrEmailTaken    = errors.New("email already taken")
 )
 
-// ==== DTO untuk Register ====
-type RegisterInput struct {
-	Username string
-	Email    string
-	FullName string
-	Password string
-}
 
-// ==== Service ====
+
+
 type AuthService struct {
 	userRepo      repo.UserRepository
 	defaultRoleID uuid.UUID
@@ -43,8 +35,15 @@ func NewAuthService(userRepo repo.UserRepository, defaultRoleID uuid.UUID) *Auth
 	}
 }
 
-// ===== LOGIN (tetap seperti sebelumnya, cuma contoh singkat) =====
-
+// @Summary      User Login
+// @Description  Authenticate a user with username and password, returns access and refresh tokens.
+// @Tags         Auth
+// @Accept       json
+// @Produce      json
+// @Success      200  {object}  entity.LoginResponse
+// @Failure      400  {object}  map[string]interface{}
+// @Failure      401  {object}  map[string]interface{}
+// @Router       /auth/login [post]
 func (s *AuthService) Login(username, password string) (*entity.LoginResponse, error) {
 	user, roleName, err := s.userRepo.GetByUsername(username)
 	if err != nil {
@@ -89,9 +88,16 @@ func (s *AuthService) Login(username, password string) (*entity.LoginResponse, e
 	return resp, nil
 }
 
-// ===== REGISTER (hash password + simpan ke DB) =====
-
-func (s *AuthService) Register(input RegisterInput) (*entity.UserResp, error) {
+// @Summary      Register New User
+// @Description  Creates a new user account with default 'buyer' role.
+// @Tags         Auth
+// @Accept       json
+// @Produce      json
+// @Success      201  {object}  entity.UserResp
+// @Failure      400  {object}  map[string]interface{}
+// @Failure      500  {object}  map[string]interface{}
+// @Router       /auth/register [post]
+func (s *AuthService) Register(input *entity.RegisterInput) (*entity.UserResp, error) {
 	// cek username
 	if u, _, _ := s.userRepo.GetByUsername(input.Username); u != nil {
 		return nil, ErrUsernameTaken
@@ -108,7 +114,7 @@ func (s *AuthService) Register(input RegisterInput) (*entity.UserResp, error) {
 		return nil, err
 	}
 
-	// role buyer *wajib* digunakan
+	// role buyer 
 	roleID := s.defaultRoleID
 	if roleID == uuid.Nil {
 		return nil, errors.New("default role 'buyer' is not set")
@@ -129,26 +135,31 @@ func (s *AuthService) Register(input RegisterInput) (*entity.UserResp, error) {
 		return nil, err
 	}
 
-	// dapatkan nama role buyer
+	// nama role buyer
 	_, roleName, err := s.userRepo.GetByUsername(user.Username)
 	if err != nil {
-		roleName = "buyer" // fallback
+		roleName = "buyer" 
 	}
 
 	resp := &entity.UserResp{
 		ID:          user.ID,
 		Username:    user.Username,
 		FullName:    user.FullName,
-		Role:        roleName,     // SUDAH BENAR → string buyer
-		Permissions: []string{},   // bisa ambil kalau mau
+		Role:        roleName,     
+		Permissions: []string{},   
 	}
 
 	return resp, nil
 }
 
-
-// ===== REFRESH & PROFILE (tetap sama dengan versi sebelumnya, tidak aku ulang semua) =====
-
+// @Summary      Refresh Access Token
+// @Description  Exchanges a valid refresh token for a new access token.
+// @Tags         Auth
+// @Accept       json
+// @Produce      json
+// @Success      200  {object}  entity.RefreshResponse
+// @Failure      401  {object}  map[string]interface{}
+// @Router       /auth/refresh [post]
 func (s *AuthService) Refresh(refreshToken string) (string, error) {
 	claims, err := utils.ValidateRefreshToken(refreshToken)
 	if err != nil {
@@ -183,6 +194,16 @@ func (s *AuthService) Refresh(refreshToken string) (string, error) {
 	return newToken, nil
 }
 
+// @Summary      Get User Profile
+// @Description  Retrieves the current authenticated user's profile details.
+// @Tags         Auth
+// @Accept       json
+// @Produce      json
+// @Security     ApiKeyAuth
+// @Success      200  {object}  entity.UserResp
+// @Failure      401  {object}  map[string]interface{}
+// @Failure      404  {object}  map[string]interface{}
+// @Router       /auth/profile [get]
 func (s *AuthService) GetProfile(userID uuid.UUID) (*entity.UserResp, error) {
 	user, err := s.userRepo.GetByID(userID)
 	if err != nil {

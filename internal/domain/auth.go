@@ -19,6 +19,15 @@ type RefreshClaims struct {
 	jwt.RegisteredClaims
 }
 
+type RefreshResponse struct {
+    Token string `json:"token"`
+}
+
+type LoginInput struct {
+    Username string `json:"username"`
+    Password string `json:"password"`
+}
+
 type LoginResponse struct {
 	Token        string   `json:"token"`
 	RefreshToken string   `json:"refresh_token"`
@@ -31,4 +40,11 @@ type UserResp struct {
 	FullName    string    `json:"fullName"`
 	Role        string    `json:"role"`
 	Permissions []string  `json:"permissions"`
+}
+
+type RegisterInput struct {
+	Username string
+	Email    string
+	FullName string
+	Password string
 }

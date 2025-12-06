@@ -13,7 +13,7 @@ import (
 	"go.mongodb.org/mongo-driver/mongo"
 	swaggerFiles "github.com/swaggo/files"
     ginSwagger "github.com/swaggo/gin-swagger"
-	_ "home-market/internal/delivery/http/docs"
+	_ "home-market/docs"
 )
 
 // Asumsi: NewItemService, NewOfferService, NewOrderService, NewAdminService sudah menerima dependencies yang benar.

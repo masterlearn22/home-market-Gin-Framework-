@@ -2,14 +2,14 @@ package service
 
 import (
 	"errors"
+	"github.com/google/uuid"
 	entity "home-market/internal/domain"
 	repo "home-market/internal/repository/postgresql"
-	"github.com/google/uuid"
 )
 
 type AdminService struct {
-	userRepo repo.UserRepository 
-	itemRepo repo.ItemRepository 
+	userRepo repo.UserRepository
+	itemRepo repo.ItemRepository
 }
 
 func NewAdminService(userRepo repo.UserRepository, itemRepo repo.ItemRepository) *AdminService {
@@ -50,7 +50,6 @@ func (s *AdminService) BlockUser(adminRole string, targetUserID uuid.UUID, isAct
 	if adminRole != "admin" {
 		return errors.New("unauthorized: admin access required")
 	}
-	// FR-ADMIN-03: Set is_active = false [cite: 478]
 	return s.userRepo.UpdateUserStatus(targetUserID, isActive)
 }
 
@@ -71,7 +70,7 @@ func (s *AdminService) ModerateItem(adminRole string, itemID uuid.UUID) error {
 	if adminRole != "admin" {
 		return errors.New("unauthorized: admin access required")
 	}
-	
+
 	item, err := s.itemRepo.GetItemByID(itemID)
 	if err != nil {
 		return err
@@ -80,7 +79,6 @@ func (s *AdminService) ModerateItem(adminRole string, itemID uuid.UUID) error {
 		return errors.New("item not found")
 	}
 
-	// FR-ADMIN-02: Ubah status item menjadi 'inactive' [cite: 473]
-	item.Status = "inactive" 
-	return s.itemRepo.UpdateItem(item) 
+	item.Status = "inactive"
+	return s.itemRepo.UpdateItem(item)
 }
