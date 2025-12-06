@@ -13,82 +13,96 @@ import (
 	"go.mongodb.org/mongo-driver/mongo"
 )
 
-func SetupRoute(app *gin.Engine, db *sql.DB,mongoclient *mongo.Client) {
-    // --- 1. Ambil default role untuk user baru (misal: "buyer") ---
+// Asumsi: NewItemService, NewOfferService, NewOrderService, NewAdminService sudah menerima dependencies yang benar.
+
+func SetupRoute(app *gin.Engine, db *sql.DB, mongoclient *mongo.Client) {
+	// --- 1. Ambil default role ---
 	var defaultRoleID uuid.UUID
-	err := db.QueryRow(`SELECT id FROM roles WHERE name = $1`, "buyer").Scan(&defaultRoleID)
-	if err != nil {
+	if err := db.QueryRow(`SELECT id FROM roles WHERE name = $1`, "buyer").Scan(&defaultRoleID); err != nil {
 		log.Printf("warning: gagal mengambil default role 'buyer': %v", err)
 	}
 
-	// --- 2. Init repository, service, handler ---
+	// --- 2. INIT REPOSITORIES (Dependencies Inti) ---
 	userRepo := repo.NewUserRepository(db)
-	authService := service.NewAuthService(userRepo, defaultRoleID)
-	authHandler := httpHandler.NewAuthHandler(authService)
 	shopRepo := repo.NewShopRepository(db)
-	shopService := service.NewShopService(shopRepo)
-	shopHandler := httpHandler.NewShopHandler(shopService)
 	categoryRepo := repo.NewCategoryRepository(db)
-	categoryService := service.NewCategoryService(categoryRepo)
-	categoryHandler := httpHandler.NewCategoryHandler(categoryService)
 	itemRepo := repo.NewItemRepository(db)
-	logRepo := mongorepo.NewLogRepository(mongoclient)
-	itemService := service.NewItemService(itemRepo,logRepo)
-	itemHandler := httpHandler.NewItemHandler(itemService)
-	adminService := service.NewAdminService(userRepo, itemRepo)
-    adminHandler := httpHandler.NewAdminHandler(adminService)
+	orderRepo := repo.NewOrderRepository(db)
+	offerRepo := repo.NewOfferRepository(db) // Asumsi OfferRepo ada
+	logRepo := mongorepo.NewLogRepository(mongoclient) // MongoDB Log Repo
 
-	// --- 3. Definisikan group route ---
+	// --- 3. INIT SERVICES ---
+	authService := service.NewAuthService(userRepo, defaultRoleID)
+	shopService := service.NewShopService(shopRepo)
+	categoryService := service.NewCategoryService(categoryRepo)
+	
+    // Service yang membutuhkan banyak dependency:
+	itemService := service.NewItemService(itemRepo, shopRepo, orderRepo) // Core Item CRUD
+	orderService := service.NewOrderService(orderRepo, shopRepo, logRepo) // Order, Marketplace, Shipment
+	offerService := service.NewOfferService(offerRepo, itemRepo, shopRepo, logRepo) // Offer Management
+	adminService := service.NewAdminService(userRepo, itemRepo) // Admin Moderation
+
+	// --- 4. INIT HANDLERS ---
+	authHandler := httpHandler.NewAuthHandler(authService)
+	shopHandler := httpHandler.NewShopHandler(shopService)
+	categoryHandler := httpHandler.NewCategoryHandler(categoryService)
+	itemHandler := httpHandler.NewItemHandler(itemService) // Item CRUD
+	orderHandler := httpHandler.NewOrderHandler(orderService) // Order/Marketplace
+	offerHandler := httpHandler.NewOfferHandler(offerService) // Offer Management
+	adminHandler := httpHandler.NewAdminHandler(adminService)
+
+	// --- 5. DEFINISIKAN GROUP ROUTE ---
 	api := app.Group("/api")
 
+    // --- Authentication & Profile ---
 	auth := api.Group("/auth")
 	auth.POST("/register", authHandler.Register)
 	auth.POST("/login", authHandler.Login)
 	auth.POST("/refresh", authHandler.Refresh)
 	auth.GET("/profile", middleware.AuthRequired(), authHandler.Profile)
 
-	
+    // --- Shop & Categories ---
 	shop := api.Group("/shops")
 	shop.POST("/", middleware.AuthRequired(), shopHandler.CreateShop)
 	cat := api.Group("/categories")
 	cat.POST("/", middleware.AuthRequired(), categoryHandler.CreateCategory)
 
+    // --- Item CRUD (Seller) ---
 	items := api.Group("/items", middleware.AuthRequired())
-	items.POST("/", itemHandler.CreateItem)
-	items.PUT("/:id", itemHandler.UpdateItem)    
-    items.DELETE("/:id", itemHandler.DeleteItem) 
+	items.POST("", itemHandler.CreateItem)
+	items.PUT("/:id", itemHandler.UpdateItem)
+	items.DELETE("/:id", itemHandler.DeleteItem)
 
+    // --- Offer Management (Giver & Seller) ---
 	offers := api.Group("/offers", middleware.AuthRequired())
-    offers.POST("", itemHandler.CreateOffer)
-    offers.GET("/my", itemHandler.GetMyOffers)
-    offers.GET("/inbox", middleware.AuthRequired(), itemHandler.GetOffersToSeller)
-    offers.POST("/:id/accept", middleware.AuthRequired(), itemHandler.AcceptOffer)
-    offers.POST("/:id/reject", middleware.AuthRequired(), itemHandler.RejectOffer)	
+	offers.POST("", offerHandler.CreateOffer)           // Giver Create Offer
+	offers.GET("/my", offerHandler.GetMyOffers)         // Giver View Offers
+	offers.GET("/inbox", offerHandler.GetOffersToSeller) // Seller View Inbox
+	offers.POST("/:id/accept", offerHandler.AcceptOffer)
+	offers.POST("/:id/reject", offerHandler.RejectOffer)
 
+    // --- Marketplace (Public/Buyer) ---
 	market := api.Group("/market")
-    market.GET("/items", itemHandler.GetMarketplaceItems)
-    market.GET("/items/:id", itemHandler.GetItemDetail)  
-    orders := api.Group("/orders")
-    orders.POST("", middleware.AuthRequired(), itemHandler.CreateOrder)
-	// Endpoint Seller/Admin (FR-ORDER-02 & FR-ORDER-03)
-    orders.PATCH("/:id/status", middleware.AuthRequired(), itemHandler.UpdateOrderStatus)
-    orders.POST("/:id/shipping", middleware.AuthRequired(), itemHandler.InputShippingReceipt)
-    
-    // Endpoint Buyer/Admin (FR-ORDER-04)
-    orders.GET("/:id/tracking", middleware.AuthRequired(), itemHandler.GetOrderTracking)
+	market.GET("/items", orderHandler.GetMarketplaceItems) // Buyer/Public View
+	market.GET("/items/:id", orderHandler.GetItemDetail) // Buyer/Public Detail
+
+    // --- Orders & Shipment ---
+	orders := api.Group("/orders")
+	orders.POST("", middleware.AuthRequired(), orderHandler.CreateOrder) // Buyer Create Order
+	
+    // Seller/Admin Management
+	orders.PATCH("/:id/status", middleware.AuthRequired(), orderHandler.UpdateOrderStatus)
+	orders.POST("/:id/shipping", middleware.AuthRequired(), orderHandler.InputShippingReceipt)
+	
+    // Buyer/Admin Tracking
+	orders.GET("/:id/tracking", middleware.AuthRequired(), orderHandler.GetOrderTracking)
 
 
-	// --- Admin Group ---
-    admin := api.Group("/admin")
-    // Pasang AuthRequired dan RoleAllowed global untuk semua endpoint Admin
-    admin.Use(middleware.AuthRequired(), middleware.RoleAllowed("admin")) 
-    
-    // FR-ADMIN-01: List Users
-    admin.GET("/users", adminHandler.ListUsers)
-    
-    // FR-ADMIN-03: Blokir User
-    admin.PATCH("/users/:id/status", adminHandler.BlockUser) 
-    
-    // FR-ADMIN-02: Moderasi Barang
-    admin.PATCH("/items/:id/moderate", adminHandler.ModerateItem)
+    // --- Admin Group ---
+	admin := api.Group("/admin")
+	admin.Use(middleware.AuthRequired(), middleware.RoleAllowed("admin")) 
+	
+	admin.GET("/users", adminHandler.ListUsers)
+	admin.PATCH("/users/:id/status", adminHandler.BlockUser) 
+	admin.PATCH("/items/:id/moderate", adminHandler.ModerateItem)
 }
