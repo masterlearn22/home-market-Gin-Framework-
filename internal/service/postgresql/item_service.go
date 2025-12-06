@@ -4,10 +4,12 @@ import (
 	"errors"
 	"time"
     "fmt"
+    "log"
     "database/sql"
 	entity "home-market/internal/domain"
 	repo "home-market/internal/repository/postgresql"
-
+    mongorepo "home-market/internal/repository/mongodb"
+    "go.mongodb.org/mongo-driver/bson/primitive"
 	"github.com/google/uuid"
 )
 
@@ -23,11 +25,14 @@ var (
 
 type ItemService struct {
 	itemRepo repo.ItemRepository
+    logRepo  mongorepo.LogRepository
 }
 
-func NewItemService(itemRepo repo.ItemRepository) *ItemService {
+
+func NewItemService(itemRepo repo.ItemRepository, logRepo mongorepo.LogRepository) *ItemService {
 	return &ItemService{
 		itemRepo: itemRepo,
+        logRepo: logRepo,
 	}
 }
 
@@ -448,4 +453,136 @@ func (s *ItemService) CreateOrder(buyerID uuid.UUID, input entity.CreateOrderInp
     }
 
     return order, nil
+}
+
+// [internal/service/item_service.go]
+
+var ValidOrderStatuses = map[string]bool{
+    "pending": true, "paid": true, "processing": true, 
+    "shipped": true, "completed": true, "cancelled": true,
+}
+
+// FR-ORDER-02: Update Status Order
+func (s *ItemService) UpdateOrderStatus(userID uuid.UUID, role string, orderID uuid.UUID, input entity.UpdateOrderStatusInput) (*entity.Order, error) {
+    if !ValidOrderStatuses[input.NewStatus] {
+        return nil, errors.New("invalid status value")
+    }
+
+    order, err := s.itemRepo.GetOrderByID(orderID)
+    if err != nil {
+        return nil, err
+    }
+    if order == nil {
+        return nil, errors.New("order not found")
+    }
+    
+    // Validasi Otorisasi (FR-ORDER-02)
+    shop, _ := s.itemRepo.GetShopByUserID(userID)
+    isOwner := shop != nil && order.ShopID == shop.ID
+    isAdmin := role == "admin"
+    
+    if !isOwner && !isAdmin {
+        return nil, errors.New("unauthorized: you are not the shop owner or admin")
+    }
+    
+    oldStatus := order.Status
+
+    // 1. Update Status di PostgreSQL
+    if err := s.itemRepo.UpdateOrderStatus(orderID, input.NewStatus); err != nil {
+        return nil, err
+    }
+    order.Status = input.NewStatus
+    
+    // 2. Simpan Riwayat Status ke MongoDB (FR-ORDER-02)
+    history := &entity.HistoryStatus{
+    ID: primitive.NewObjectID(), // FIX: primitive sekarang dikenali
+    RelatedID: orderID.String(), // FIX: Konversi UUID ke string (Image 1, error 3)
+    RelatedType: "order",        // Sekarang dikenali
+    OldStatus: oldStatus,
+    NewStatus: input.NewStatus,
+    ChangedBy: userID.String(),  // FIX: Konversi UUID ke string (Image 1, error 5)
+    Timestamp: time.Now(),
+    Note: input.Note,
+}
+    // Asumsi LogRepo sudah di-inject ke Service
+    s.logRepo.SaveHistoryStatus(history) 
+
+    return order, nil
+}
+
+// FR-ORDER-03: Input Nomor Resi Pengiriman
+func (s *ItemService) InputShippingReceipt(userID uuid.UUID, role string, orderID uuid.UUID, input entity.InputShippingReceiptInput) (*entity.Order, error) {
+    order, err := s.itemRepo.GetOrderByID(orderID)
+    if err != nil {
+        return nil, err
+    }
+    if order == nil {
+        return nil, errors.New("order not found")
+    }
+
+    // Validasi Otorisasi (Seller/Admin)
+    shop, _ := s.itemRepo.GetShopByUserID(userID)
+    isOwner := shop != nil && order.ShopID == shop.ID
+    isAdmin := role == "admin"
+    if !isOwner && !isAdmin {
+        return nil, errors.New("unauthorized")
+    }
+    
+    oldStatus := order.Status
+
+    // 1. Update Resi dan Status='shipped' di PostgreSQL (FR-ORDER-03)
+    if err := s.itemRepo.UpdateOrderShipment(orderID, input.ShippingCourier, input.ShippingReceipt); err != nil {
+        return nil, err
+    }
+    order.ShippingCourier = input.ShippingCourier
+    order.ShippingReceipt = input.ShippingReceipt
+    order.Status = "shipped"
+    
+    // 2. Simpan Riwayat Status ke MongoDB (MENGGUNAKAN VARIABEL history)
+    history := &entity.HistoryStatus{
+        ID: primitive.NewObjectID(),
+        RelatedID: orderID.String(),
+        RelatedType: "order",
+        OldStatus: oldStatus,
+        NewStatus: "shipped",
+        ChangedBy: userID.String(),
+        Timestamp: time.Now(),
+        Note: fmt.Sprintf("Shipping receipt added: %s (%s)", input.ShippingReceipt, input.ShippingCourier), // Tambah catatan
+    }
+    
+    // HILANGKAN KOMENTAR PADA BARIS BERIKUT:
+    if err := s.logRepo.SaveHistoryStatus(history); err != nil { 
+        // Log error MongoDB. Transaksi PG sudah berhasil, jadi Order tetap dibuat.
+        log.Printf("Warning: failed to save history status for order %s: %v", orderID.String(), err) 
+    }
+
+    return order, nil
+}
+
+// FR-ORDER-04: Tracking Order (Buyer)
+func (s *ItemService) GetOrderTracking(userID uuid.UUID, role string, orderID uuid.UUID) (*entity.Order, []entity.OrderItem, error) {
+    order, err := s.itemRepo.GetOrderByID(orderID)
+    if err != nil {
+        return nil, nil, err
+    }
+    if order == nil {
+        return nil, nil, errors.New("order not found")
+    }
+
+    // Validasi Otorisasi (Hanya Buyer atau Admin yang terkait)
+    isAdmin := role == "admin"
+    isBuyer := order.BuyerID == userID
+    if !isBuyer && !isAdmin {
+        return nil, nil, errors.New("unauthorized: access denied")
+    }
+
+    // Ambil detail order items
+    items, err := s.itemRepo.GetOrderItems(orderID)
+    if err != nil {
+        return order, nil, err
+    }
+    
+    // Opsional: Ambil history status dari MongoDB
+    
+    return order, items, nil
 }

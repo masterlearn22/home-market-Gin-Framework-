@@ -10,9 +10,10 @@ type Order struct {
 	ShopID        uuid.UUID `db:"shop_id"`
 	Number        string    `db:"number"`
 	Status        string    `db:"status"` // pending, paid, processing, shipped, completed, cancelled
-	TotalPrice       float64   `db:"total_price"`
+	TotalPrice       float64   `db:"total_price" json:"totalPrice"`
 	ShippingAddress string  `db:"shipping_address"`
-	ShippingCourier  string    `db:"shipping_courier"`
+	ShippingCourier  string    `db:"shipping_courier" json:"shippingCourier"`
+	ShippingReceipt  string    `db:"shipping_receipt"`
 	CreatedAt     time.Time `db:"created_at"`
 	UpdatedAt     time.Time `db:"updated_at"`
 }
@@ -46,3 +47,16 @@ type ItemFilter struct {
     Limit       int     `form:"limit"`
     Offset      int     `form:"offset"`
 }
+
+type UpdateOrderStatusInput struct {
+	NewStatus string `json:"new_status" binding:"required"`
+	Note      string `json:"note"` // Opsional: catatan perubahan status
+}
+
+// Input untuk FR-ORDER-03: Input Nomor Resi
+type InputShippingReceiptInput struct {
+	ShippingCourier string `json:"shipping_courier" binding:"required"`
+	ShippingReceipt string `json:"shipping_receipt" binding:"required"`
+}
+
+

@@ -20,12 +20,13 @@ func main() {
 
 	// Connect to MongoDB
 	config.ConnectMongo()
+	mongoClient := config.MongoDB.Client()
 	
 	//3. Setup Gin App
 	var app = config.SetupGin()
 
 	//4. Initialize Routes
-	route.SetupRoute(app, config.PostgresDB)
+	route.SetupRoute(app, config.PostgresDB, mongoClient)
 	fmt.Println("Setup route berhasil")
 
 	//5. Run the server

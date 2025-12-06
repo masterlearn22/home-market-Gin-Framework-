@@ -5,12 +5,13 @@ import (
 )
 
 type HistoryStatus struct {
-	ID         primitive.ObjectID `bson:"_id,omitempty"`
-	RelatedID  string             `bson:"related_id"` // item/order/offer id
-	OldStatus  string             `bson:"old_status"`
-	NewStatus  string             `bson:"new_status"`
-	UpdatedBy  string             `bson:"updated_by"`
-	Note       string             `bson:"note"`
-	Timestamp  time.Time          `bson:"timestamp"`
+    ID           primitive.ObjectID `bson:"_id" json:"id"`
+    RelatedID    string             `bson:"related_id" json:"relatedId"`
+    RelatedType  string             `bson:"related_type" json:"relatedType"`
+    OldStatus    string             `bson:"old_status" json:"oldStatus"`
+    NewStatus    string             `bson:"new_status" json:"newStatus"`
+    ChangedBy    string             `bson:"changed_by" json:"changedBy"`      
+    Timestamp    time.Time          `bson:"timestamp" json:"timestamp"`
+    Note         string             `bson:"note" json:"note"`
 }
 

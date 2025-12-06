@@ -22,6 +22,10 @@ type ItemRepository interface {
     GetMarketItems(filter entity.ItemFilter) ([]entity.Item, error)
     GetItemForOrder(itemID uuid.UUID) (*entity.Item, error) // Ambil detail item + stok
     CreateOrderTransaction(order *entity.Order, items []entity.OrderItem) error
+    GetOrderByID(orderID uuid.UUID) (*entity.Order, error)
+    UpdateOrderStatus(orderID uuid.UUID, status string) error
+    UpdateOrderShipment(orderID uuid.UUID, courier string, receipt string) error
+    GetOrderItems(orderID uuid.UUID) ([]entity.OrderItem, error)
 }
 
 type itemRepository struct {
@@ -298,4 +302,46 @@ func (r *itemRepository) CreateOrderTransaction(order *entity.Order, orderItems 
     }
 
     return tx.Commit()
+}
+
+func (r *itemRepository) GetOrderByID(orderID uuid.UUID) (*entity.Order, error) {
+    var order entity.Order
+    query := `
+        SELECT id, buyer_id, shop_id, total_price, status, shipping_address, shipping_courier, shipping_receipt, created_at, updated_at
+        FROM orders WHERE id = $1
+    `
+    // Implementasi Scan...
+    err := r.db.QueryRow(query, orderID).Scan(
+        &order.ID, &order.BuyerID, &order.ShopID, &order.TotalPrice, &order.Status, 
+        &order.ShippingAddress, &order.ShippingCourier, &order.ShippingReceipt, &order.CreatedAt, &order.UpdatedAt,
+    )
+    if err == sql.ErrNoRows {
+        return nil, nil
+    }
+    return &order, err
+}
+
+// FR-ORDER-02: Update Status
+func (r *itemRepository) UpdateOrderStatus(orderID uuid.UUID, status string) error {
+    query := `UPDATE orders SET status = $1, updated_at = NOW() WHERE id = $2`
+    _, err := r.db.Exec(query, status, orderID)
+    return err
+}
+
+// FR-ORDER-03: Input Nomor Resi
+func (r *itemRepository) UpdateOrderShipment(orderID uuid.UUID, courier string, receipt string) error {
+    // FR-ORDER-03 juga mengubah status menjadi 'shipped'
+    query := `
+        UPDATE orders SET shipping_courier = $1, shipping_receipt = $2, status = 'shipped', updated_at = NOW() 
+        WHERE id = $3
+    `
+    _, err := r.db.Exec(query, courier, receipt, orderID)
+    return err
+}
+
+// FR-ORDER-04: Ambil Order Items untuk Tracking
+func (r *itemRepository) GetOrderItems(orderID uuid.UUID) ([]entity.OrderItem, error) {
+    // Implementasi query SELECT dari tabel order_items
+    // ...
+    return nil, nil // Placeholder
 }

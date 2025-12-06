@@ -6,12 +6,14 @@ import (
 	"github.com/google/uuid"
 	httpHandler "home-market/internal/delivery/http/handler"
 	repo "home-market/internal/repository/postgresql"
+	mongorepo "home-market/internal/repository/mongodb"
 	service "home-market/internal/service/postgresql"
 	"github.com/gin-gonic/gin"
 	"home-market/internal/delivery/http/middleware"
+	"go.mongodb.org/mongo-driver/mongo"
 )
 
-func SetupRoute(app *gin.Engine, db *sql.DB) {
+func SetupRoute(app *gin.Engine, db *sql.DB,mongoclient *mongo.Client) {
     // --- 1. Ambil default role untuk user baru (misal: "buyer") ---
 	var defaultRoleID uuid.UUID
 	err := db.QueryRow(`SELECT id FROM roles WHERE name = $1`, "buyer").Scan(&defaultRoleID)
@@ -30,7 +32,8 @@ func SetupRoute(app *gin.Engine, db *sql.DB) {
 	categoryService := service.NewCategoryService(categoryRepo)
 	categoryHandler := httpHandler.NewCategoryHandler(categoryService)
 	itemRepo := repo.NewItemRepository(db)
-	itemService := service.NewItemService(itemRepo)
+	logRepo := mongorepo.NewLogRepository(mongoclient)
+	itemService := service.NewItemService(itemRepo,logRepo)
 	itemHandler := httpHandler.NewItemHandler(itemService)
 
 	// --- 3. Definisikan group route ---
@@ -65,4 +68,10 @@ func SetupRoute(app *gin.Engine, db *sql.DB) {
     market.GET("/items/:id", itemHandler.GetItemDetail)  
     orders := api.Group("/orders")
     orders.POST("", middleware.AuthRequired(), itemHandler.CreateOrder)
+	// Endpoint Seller/Admin (FR-ORDER-02 & FR-ORDER-03)
+    orders.PATCH("/:id/status", middleware.AuthRequired(), itemHandler.UpdateOrderStatus)
+    orders.POST("/:id/shipping", middleware.AuthRequired(), itemHandler.InputShippingReceipt)
+    
+    // Endpoint Buyer/Admin (FR-ORDER-04)
+    orders.GET("/:id/tracking", middleware.AuthRequired(), itemHandler.GetOrderTracking)
 }
