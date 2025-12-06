@@ -1,0 +1,19 @@
+{
+    "swagger": "2.0",
+    "info": {
+        "description": "This is the API documentation for the Home Market project.",
+        "title": "Home Market API",
+        "contact": {},
+        "version": "1.0"
+    },
+    "host": "localhost:8080",
+    "basePath": "/api",
+    "paths": {},
+    "securityDefinitions": {
+        "ApiKeyAuth": {
+            "type": "apiKey",
+            "name": "Authorization",
+            "in": "header"
+        }
+    }
+}

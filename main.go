@@ -6,6 +6,14 @@ import (
 	"home-market/internal/delivery/http/route"
 )
 
+// @title           Home Market API
+// @version         1.0
+// @description     This is the API documentation for the Home Market project.
+// @host      localhost:8080
+// @BasePath  /api
+// @securityDefinitions.apikey ApiKeyAuth
+// @in header
+// @name Authorization
 func main() {
 	// fmt.Println("Hello, World!")
 

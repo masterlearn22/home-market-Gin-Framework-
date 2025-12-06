@@ -11,6 +11,9 @@ import (
 	"github.com/gin-gonic/gin"
 	"home-market/internal/delivery/http/middleware"
 	"go.mongodb.org/mongo-driver/mongo"
+	swaggerFiles "github.com/swaggo/files"
+    ginSwagger "github.com/swaggo/gin-swagger"
+	_ "home-market/internal/delivery/http/docs"
 )
 
 // Asumsi: NewItemService, NewOfferService, NewOrderService, NewAdminService sudah menerima dependencies yang benar.
@@ -53,6 +56,12 @@ func SetupRoute(app *gin.Engine, db *sql.DB, mongoclient *mongo.Client) {
 
 	// --- 5. DEFINISIKAN GROUP ROUTE ---
 	api := app.Group("/api")
+
+	// --- SWAGGER/OPENAPI DOCUMENTATION ROUTE ---
+    app.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler,
+        ginSwagger.URL("/swagger/doc.json"),
+        ginSwagger.DefaultModelsExpandDepth(0),
+    ))
 
     // --- Authentication & Profile ---
 	auth := api.Group("/auth")
