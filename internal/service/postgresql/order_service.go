@@ -11,6 +11,10 @@ import (
 	"github.com/google/uuid"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
+var ValidOrderStatuses = map[string]bool{
+    "pending": true, "paid": true, "processing": true,
+    "shipped": true, "completed": true, "cancelled": true,
+}
 
 
 type OrderService struct {

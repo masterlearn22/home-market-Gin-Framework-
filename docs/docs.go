@@ -710,7 +710,7 @@ const docTemplate = `{
         },
         "/market/items/{id}": {
             "get": {
-                "description": "Retrieves detailed information for a single active item in the marketplace.",
+                "description": "Retrieves detailed information for a single item, ensuring it is active and available.",
                 "consumes": [
                     "application/json"
                 ],
@@ -720,11 +720,11 @@ const docTemplate = `{
                 "tags": [
                     "Marketplace"
                 ],
-                "summary": "Get Item Detail",
+                "summary": "Get Item Detail (Marketplace View)",
                 "parameters": [
                     {
                         "type": "string",
-                        "description": "Item ID",
+                        "description": "Item ID to retrieve",
                         "name": "id",
                         "in": "path",
                         "required": true

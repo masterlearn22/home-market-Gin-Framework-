@@ -730,10 +730,10 @@ paths:
     get:
       consumes:
       - application/json
-      description: Retrieves detailed information for a single active item in the
-        marketplace.
+      description: Retrieves detailed information for a single item, ensuring it is
+        active and available.
       parameters:
-      - description: Item ID
+      - description: Item ID to retrieve
         in: path
         name: id
         required: true
@@ -755,7 +755,7 @@ paths:
           schema:
             additionalProperties: true
             type: object
-      summary: Get Item Detail
+      summary: Get Item Detail (Marketplace View)
       tags:
       - Marketplace
   /offers:

@@ -12,11 +12,9 @@ import (
 	"home-market/internal/delivery/http/middleware"
 	"go.mongodb.org/mongo-driver/mongo"
 	swaggerFiles "github.com/swaggo/files"
-    ginSwagger "github.com/swaggo/gin-swagger"
+	ginSwagger "github.com/swaggo/gin-swagger"
 	_ "home-market/docs"
 )
-
-// Asumsi: NewItemService, NewOfferService, NewOrderService, NewAdminService sudah menerima dependencies yang benar.
 
 func SetupRoute(app *gin.Engine, db *sql.DB, mongoclient *mongo.Client) {
 	// --- 1. Ambil default role ---
@@ -31,83 +29,81 @@ func SetupRoute(app *gin.Engine, db *sql.DB, mongoclient *mongo.Client) {
 	categoryRepo := repo.NewCategoryRepository(db)
 	itemRepo := repo.NewItemRepository(db)
 	orderRepo := repo.NewOrderRepository(db)
-	offerRepo := repo.NewOfferRepository(db) // Asumsi OfferRepo ada
-	logRepo := mongorepo.NewLogRepository(mongoclient) // MongoDB Log Repo
+	offerRepo := repo.NewOfferRepository(db) 
+	logRepo := mongorepo.NewLogRepository(mongoclient) 
 
 	// --- 3. INIT SERVICES ---
 	authService := service.NewAuthService(userRepo, defaultRoleID)
-	shopService := service.NewShopService(shopRepo)
-	categoryService := service.NewCategoryService(categoryRepo)
 	
-    // Service yang membutuhkan banyak dependency:
-	itemService := service.NewItemService(itemRepo, shopRepo, orderRepo) // Core Item CRUD
-	orderService := service.NewOrderService(orderRepo, shopRepo, logRepo) // Order, Marketplace, Shipment
-	offerService := service.NewOfferService(offerRepo, itemRepo, shopRepo, logRepo) // Offer Management
-	adminService := service.NewAdminService(userRepo, itemRepo) // Admin Moderation
+	// INIT SERVICE GABUNGAN (Shop, Category, Item CRUD)
+	shopItemService := service.NewShopItemService(shopRepo, categoryRepo, itemRepo, orderRepo) 
+
+	// Service yang tetap terpisah
+	orderService := service.NewOrderService(orderRepo, shopRepo, logRepo) 
+	offerService := service.NewOfferService(offerRepo, itemRepo, shopRepo, logRepo) 
+	adminService := service.NewAdminService(userRepo, itemRepo) 
 
 	// --- 4. INIT HANDLERS ---
 	authHandler := httpHandler.NewAuthHandler(authService)
-	shopHandler := httpHandler.NewShopHandler(shopService)
-	categoryHandler := httpHandler.NewCategoryHandler(categoryService)
-	itemHandler := httpHandler.NewItemHandler(itemService) // Item CRUD
-	orderHandler := httpHandler.NewOrderHandler(orderService) // Order/Marketplace
-	offerHandler := httpHandler.NewOfferHandler(offerService) // Offer Management
+	// INIT HANDLER GABUNGAN
+	shopItemHandler := httpHandler.NewShopItemHandler(shopItemService) 
+
+	// Handlers yang tetap terpisah
+	orderHandler := httpHandler.NewOrderHandler(orderService) 
+	offerHandler := httpHandler.NewOfferHandler(offerService) 
 	adminHandler := httpHandler.NewAdminHandler(adminService)
 
 	// --- 5. DEFINISIKAN GROUP ROUTE ---
 	api := app.Group("/api")
 
 	// --- SWAGGER/OPENAPI DOCUMENTATION ROUTE ---
-    app.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler,
-        ginSwagger.URL("/swagger/doc.json"),
-        ginSwagger.DefaultModelsExpandDepth(0),
-    ))
+	app.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler,
+		ginSwagger.URL("/swagger/doc.json"),
+		ginSwagger.DefaultModelsExpandDepth(0),
+	))
 
-    // --- Authentication & Profile ---
+	// --- Authentication & Profile ---
 	auth := api.Group("/auth")
 	auth.POST("/register", authHandler.Register)
 	auth.POST("/login", authHandler.Login)
 	auth.POST("/refresh", authHandler.Refresh)
 	auth.GET("/profile", middleware.AuthRequired(), authHandler.Profile)
 
-    // --- Shop & Categories ---
+	// --- Shop & Categories (Arahkan ke Handler Gabungan) ---
 	shop := api.Group("/shops")
-	shop.POST("/", middleware.AuthRequired(), shopHandler.CreateShop)
+	shop.POST("/", middleware.AuthRequired(), shopItemHandler.CreateShop) // DIGANTI
 	cat := api.Group("/categories")
-	cat.POST("/", middleware.AuthRequired(), categoryHandler.CreateCategory)
+	cat.POST("/", middleware.AuthRequired(), shopItemHandler.CreateCategory) // DIGANTI
 
-    // --- Item CRUD (Seller) ---
+	// --- Item CRUD (Seller) (Arahkan ke Handler Gabungan) ---
 	items := api.Group("/items", middleware.AuthRequired())
-	items.POST("", itemHandler.CreateItem)
-	items.PUT("/:id", itemHandler.UpdateItem)
-	items.DELETE("/:id", itemHandler.DeleteItem)
+	items.POST("", shopItemHandler.CreateItem) // DIGANTI
+	items.PUT("/:id", shopItemHandler.UpdateItem) // DIGANTI
+	items.DELETE("/:id", shopItemHandler.DeleteItem) // DIGANTI
 
-    // --- Offer Management (Giver & Seller) ---
+	// --- Offer Management (Giver & Seller) (TIDAK BERUBAH) ---
 	offers := api.Group("/offers", middleware.AuthRequired())
-	offers.POST("", offerHandler.CreateOffer)           // Giver Create Offer
-	offers.GET("/my", offerHandler.GetMyOffers)         // Giver View Offers
-	offers.GET("/inbox", offerHandler.GetOffersToSeller) // Seller View Inbox
+	offers.POST("", offerHandler.CreateOffer) 
+	offers.GET("/my", offerHandler.GetMyOffers) 
+	offers.GET("/inbox", offerHandler.GetOffersToSeller) 
 	offers.POST("/:id/accept", offerHandler.AcceptOffer)
 	offers.POST("/:id/reject", offerHandler.RejectOffer)
 
-    // --- Marketplace (Public/Buyer) ---
+	// --- Marketplace & Orders (TIDAK BERUBAH) ---
 	market := api.Group("/market")
-	market.GET("/items", orderHandler.GetMarketplaceItems) // Buyer/Public View
-	market.GET("/items/:id", orderHandler.GetItemDetail) // Buyer/Public Detail
+	market.GET("/items", orderHandler.GetMarketplaceItems) 
+	market.GET("/items/:id", orderHandler.GetItemDetail) 
 
-    // --- Orders & Shipment ---
 	orders := api.Group("/orders")
-	orders.POST("", middleware.AuthRequired(), orderHandler.CreateOrder) // Buyer Create Order
+	orders.POST("", middleware.AuthRequired(), orderHandler.CreateOrder) 
 	
-    // Seller/Admin Management
 	orders.PATCH("/:id/status", middleware.AuthRequired(), orderHandler.UpdateOrderStatus)
 	orders.POST("/:id/shipping", middleware.AuthRequired(), orderHandler.InputShippingReceipt)
 	
-    // Buyer/Admin Tracking
 	orders.GET("/:id/tracking", middleware.AuthRequired(), orderHandler.GetOrderTracking)
 
 
-    // --- Admin Group ---
+	// --- Admin Group (TIDAK BERUBAH) ---
 	admin := api.Group("/admin")
 	admin.Use(middleware.AuthRequired(), middleware.RoleAllowed("admin")) 
 	
